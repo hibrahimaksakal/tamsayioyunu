@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tam Sayılarla Zıplama Oyunu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@800&display=swap');
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Gökyüzü mavisi */
+            touch-action: none; /* Mobilde kaydırmayı engelle */
+            user-select: none; /* Metin seçimini engelle */
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .modal-bg {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        .btn-hover:hover {
+            transform: scale(1.05) translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        .btn-hover:active {
+            transform: scale(0.95);
+        }
+
+        /* --- MENÜ BEKLEME ANİMASYONLARI --- */
+        @keyframes menuJump {
+            0%, 100% { transform: translateY(0) scale(1.1, 0.9); } 
+            10% { transform: translateY(-20px) scale(0.95, 1.05); } 
+            50% { transform: translateY(-150px) scale(1, 1); } 
+            90% { transform: translateY(-20px) scale(0.95, 1.05); } 
+        }
+        @keyframes menuShadow {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(0.4); opacity: 0.1; }
+        }
+        
+        /* Kayan Parlayan Sayılar Animasyonu (Daha solgun) */
+        @keyframes starFade {
+            0% { opacity: 0; transform: scale(0.5) rotate(-10deg); }
+            50% { opacity: 0.35; transform: scale(1.1) rotate(0deg); text-shadow: 0 0 8px currentColor; }
+            100% { opacity: 0; transform: scale(0.8) rotate(10deg); }
+        }
+        .animate-star-fade {
+            animation: starFade 3s ease-in-out forwards;
+        }
+        
+        .animate-jump-p1 { animation: menuJump 1.3s infinite cubic-bezier(0.28, 0.84, 0.42, 1); }
+        .animate-shadow-p1 { animation: menuShadow 1.3s infinite cubic-bezier(0.28, 0.84, 0.42, 1); }
+        
+        .animate-jump-p2 { animation: menuJump 1.6s infinite cubic-bezier(0.28, 0.84, 0.42, 1); animation-delay: 0.3s; }
+        .animate-shadow-p2 { animation: menuShadow 1.6s infinite cubic-bezier(0.28, 0.84, 0.42, 1); animation-delay: 0.3s; }
+
+        /* Renk seçici stil ayarları */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 8px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Tam Ekran Butonu (Global) -->
+    <button onclick="toggleFullScreen()" class="fixed top-4 right-4 bg-gray-800 bg-opacity-40 hover:bg-opacity-80 text-white p-3 rounded-xl shadow-lg z-[60] transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+        </svg>
+    </button>
+
+    <!-- Oyun Ekranı (Canvas) -->
+    <canvas id="gameCanvas" class="hidden z-0"></canvas>
+    
+    <!-- Havai Fişekler İçin Ayrı Katman -->
+    <canvas id="fxCanvas" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none z-[100]"></canvas>
+
+    <!-- Oyun İçi Arayüz (Soru, Skor, Süre) -->
+    <div id="gameUI" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col items-center">
+        
+        <!-- Çıkış Butonu -->
+        <button onclick="requestExit()" class="pointer-events-auto absolute top-4 left-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl border-b-4 border-red-700 shadow-lg z-50 text-lg transition-transform active:scale-95">
+            🚪 Çıkış
+        </button>
+
+        <!-- Soru Sayacı -->
+        <div id="questionCountDisplay" class="absolute top-4 right-20 bg-white bg-opacity-90 px-4 py-2 rounded-xl text-purple-700 font-bold text-xl shadow-md border-b-4 border-purple-200">
+            Soru: 1/10
+        </div>
+
+        <!-- Üst Bar (Skorlar ve Süre) -->
+        <div class="w-full flex justify-between items-center px-4 md:px-12 pt-16 pb-4 text-xl md:text-4xl text-white text-shadow-md">
+            <!-- Inline style ile dinamik renk atanıyor -->
+            <div id="scoreP1Display" class="bg-opacity-80 px-4 py-2 rounded-xl border-4 border-white hidden" style="background-color: #3b82f6;">Mavi: 0</div>
+            
+            <div id="timerDisplay" class="bg-yellow-400 bg-opacity-90 px-6 py-3 rounded-full border-4 border-white text-gray-800 text-3xl md:text-5xl font-bold shadow-lg">10</div>
+            
+            <!-- Inline style ile dinamik renk atanıyor -->
+            <div id="scoreP2Display" class="bg-opacity-80 px-4 py-2 rounded-xl border-4 border-white hidden" style="background-color: #ef4444;">Kırmızı: 0</div>
+        </div>
+        
+        <!-- Soru ve Mesaj Kutuları -->
+        <div id="questionBox" class="mt-2 bg-white bg-opacity-95 px-8 py-4 rounded-3xl border-8 border-purple-500 shadow-2xl text-4xl md:text-6xl text-purple-700 transition-transform transform scale-100">
+            Soru Hazırlanıyor...
+        </div>
+
+        <div id="messageBox" class="mt-10 text-3xl md:text-5xl font-bold opacity-0 transition-opacity duration-300 drop-shadow-lg text-center px-4 inline-block">
+            <!-- Mesaj İçeriği -->
+        </div>
+    </div>
+
+    <!-- Mobil Dokunmatik Kontroller -->
+    <div id="mobileControls" class="hidden absolute bottom-10 left-0 w-full px-6 md:px-12 pointer-events-none z-30 flex justify-between items-end">
+        <div class="flex gap-4 pointer-events-auto">
+            <button id="btnLeft" class="bg-blue-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-20 h-20 text-4xl flex items-center justify-center text-white border-b-4 border-blue-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">◀</button>
+            <button id="btnRight" class="bg-blue-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-20 h-20 text-4xl flex items-center justify-center text-white border-b-4 border-blue-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">▶</button>
+        </div>
+        <div class="pointer-events-auto">
+            <button id="btnJump" class="bg-green-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-24 h-24 text-5xl flex items-center justify-center text-white border-b-4 border-green-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">▲</button>
+        </div>
+    </div>
+
+    <!-- Ana Menü -->
+    <div id="mainMenu" class="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-blue-400 to-purple-500 z-40 overflow-hidden">
+        
+        <!-- Kayan Parlayan Rakamlar Konteyneri -->
+        <div id="floatingNumbersContainer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-10 overflow-hidden"></div>
+
+        <!-- Ayarlar Butonu ve İpucu (Tooltip) -->
+        <div class="absolute top-4 left-4 z-50 flex flex-col items-start">
+            <!-- Ayarlar Butonu -->
+            <button onclick="openSettings()" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg text-lg transition-transform active:scale-95 flex items-center gap-2 border-b-4 border-gray-800 pointer-events-auto">
+                ⚙️ Ayarlar
+            </button>
+            
+            <!-- Şirin İpucu Kutucuğu (10sn sonra kaybolacak) -->
+            <div id="settingsTooltip" class="relative mt-3 bg-white text-indigo-600 px-4 py-3 rounded-2xl shadow-xl font-extrabold text-sm border-4 border-indigo-300 transition-all duration-1000 opacity-100 w-52 pointer-events-none transform scale-100 origin-top-left">
+                <!-- Yukarı bakan ok ucu -->
+                <div class="absolute -top-[10px] left-6 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[8px] border-b-indigo-300"></div>
+                <div class="absolute -top-[6px] left-[26px] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-white"></div>
+                ✨ Karakter özelliklerinizi buradan değiştirebilirsiniz.
+            </div>
+        </div>
+
+        <!-- Ana Ekranda Zıplayan 1. Karakter (Sol) -->
+        <div class="hidden md:flex absolute left-10 lg:left-32 bottom-20 flex-col items-center z-30">
+            <div class="relative pointer-events-none">
+                <!-- Karakter Gövdesi -->
+                <div id="menuCharP1" class="animate-jump-p1 w-[80px] h-[80px] relative shadow-xl rounded-lg border-b-8 z-10" style="background-color: #3b82f6; border-color: #1d4ed8;">
+                    <div class="absolute top-[20px] left-[35px] w-[18px] h-[18px] bg-white rounded-sm"><div class="absolute top-[6px] left-[8px] w-[6px] h-[6px] bg-black rounded-full"></div></div>
+                    <div class="absolute top-[20px] left-[60px] w-[18px] h-[18px] bg-white rounded-sm"><div class="absolute top-[6px] left-[8px] w-[6px] h-[6px] bg-black rounded-full"></div></div>
+                </div>
+                <!-- Zemin Gölgesi -->
+                <div class="absolute -bottom-2 left-[5px] w-[70px] h-[12px] bg-black rounded-[100%] blur-sm animate-shadow-p1"></div>
+            </div>
+        </div>
+
+        <!-- Ana Ekranda Zıplayan 2. Karakter (Sağ) -->
+        <div class="hidden md:flex absolute right-10 lg:right-32 bottom-20 flex-col items-center z-30">
+            <div class="relative pointer-events-none">
+                <!-- Karakter Gövdesi -->
+                <div id="menuCharP2" class="animate-jump-p2 w-[80px] h-[80px] relative shadow-xl rounded-lg border-b-8 z-10" style="background-color: #ef4444; border-color: #b91c1c;">
+                    <div class="absolute top-[20px] left-[5px] w-[18px] h-[18px] bg-white rounded-sm"><div class="absolute top-[6px] left-[4px] w-[6px] h-[6px] bg-black rounded-full"></div></div>
+                    <div class="absolute top-[20px] left-[30px] w-[18px] h-[18px] bg-white rounded-sm"><div class="absolute top-[6px] left-[4px] w-[6px] h-[6px] bg-black rounded-full"></div></div>
+                </div>
+                <!-- Zemin Gölgesi -->
+                <div class="absolute -bottom-2 left-[5px] w-[70px] h-[12px] bg-black rounded-[100%] blur-sm animate-shadow-p2"></div>
+            </div>
+        </div>
+
+        <h1 class="text-5xl md:text-7xl text-white font-bold mb-10 text-center drop-shadow-xl border-b-4 border-white pb-4 z-20">
+            Tam Sayı <br> <span class="text-yellow-300 text-6xl md:text-8xl">Zıplaması</span>
+        </h1>
+        
+        <div class="flex flex-col gap-4 w-4/5 md:w-1/3 max-w-sm z-20">
+            <button onclick="selectPlayerMode(1)" class="btn-hover bg-green-500 text-white py-4 rounded-2xl text-2xl border-b-8 border-green-700 transition-all">
+                Tek Oyuncu
+            </button>
+            <button onclick="selectPlayerMode(2)" class="btn-hover bg-blue-500 text-white py-4 rounded-2xl text-2xl border-b-8 border-blue-700 transition-all">
+                İki Oyuncu
+            </button>
+            <button onclick="openModal('howToPlayModal')" class="btn-hover mt-4 bg-yellow-400 text-gray-800 py-3 rounded-2xl text-xl border-b-8 border-yellow-600 transition-all">
+                Nasıl Oynanır?
+            </button>
+            <button onclick="openModal('devModal')" class="btn-hover bg-gray-200 text-gray-800 py-3 rounded-2xl text-xl border-b-8 border-gray-400 transition-all">
+                Geliştirici Bilgisi
+            </button>
+        </div>
+    </div>
+
+    <!-- Ayarlar Modalı -->
+    <div id="settingsModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full border-8 border-gray-400 relative shadow-2xl text-center">
+            <h2 class="text-4xl text-gray-700 mb-6 border-b-4 border-gray-200 pb-2">Ayarlar</h2>
+            
+            <!-- İsim ve Renk Ayarları -->
+            <div class="mb-6 flex flex-col items-center">
+                <h3 class="text-2xl text-gray-600 mb-4 font-bold">Karakter Özellikleri</h3>
+                
+                <!-- 1. Oyuncu Giriş Alanı -->
+                <div class="flex gap-2 w-full max-w-[260px] mb-3">
+                    <input type="text" id="p1NameInput" autocomplete="off" placeholder="1. Oyuncu" class="w-full py-2 px-3 text-center font-bold rounded-xl border-4 focus:outline-none transition-all" style="color: #3b82f6; border-color: #3b82f6;" maxlength="12">
+                    <input type="color" id="p1ColorInput" value="#3b82f6" class="w-12 h-12 rounded-xl border-4 cursor-pointer p-0 m-0 shrink-0" style="border-color: #3b82f6;">
+                </div>
+                
+                <!-- 2. Oyuncu Giriş Alanı -->
+                <div class="flex gap-2 w-full max-w-[260px]">
+                    <input type="text" id="p2NameInput" autocomplete="off" placeholder="2. Oyuncu" class="w-full py-2 px-3 text-center font-bold rounded-xl border-4 focus:outline-none transition-all" style="color: #ef4444; border-color: #ef4444;" maxlength="12">
+                    <input type="color" id="p2ColorInput" value="#ef4444" class="w-12 h-12 rounded-xl border-4 cursor-pointer p-0 m-0 shrink-0" style="border-color: #ef4444;">
+                </div>
+            </div>
+
+            <!-- Ses Ayarları -->
+            <div class="mb-8">
+                <h3 class="text-2xl text-purple-500 mb-3 font-bold">Ses Ayarları</h3>
+                <div class="flex flex-col gap-3">
+                    <button onclick="toggleGameSound()" id="btnGameSound" class="bg-green-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-green-700 transition-all">Oyun Sesi: Açık</button>
+                    <button onclick="toggleMenuBGM()" id="btnMenuBGM" class="bg-red-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-red-700 transition-all">Ana Ekran Müziği: Kapalı</button>
+                </div>
+            </div>
+
+            <button onclick="closeModal('settingsModal')" class="w-full bg-yellow-400 text-gray-800 py-3 rounded-xl text-2xl btn-hover border-b-4 border-yellow-600 font-bold">Kaydet ve Kapat</button>
+        </div>
+    </div>
+
+    <!-- Zorluk Seçimi Modalı -->
+    <div id="difficultyModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full border-8 border-blue-400 relative shadow-2xl text-center">
+            <h2 class="text-4xl text-blue-500 mb-6 border-b-4 border-blue-200 pb-2">Zorluk Seviyesi</h2>
+            <div class="flex flex-col gap-4">
+                <button onclick="startGameWithDifficulty('kolay')" class="btn-hover bg-green-500 text-white py-4 rounded-xl text-2xl border-b-4 border-green-700">Kolay <br><span class="text-sm font-normal">(10 Saniye, -20 ile +20)</span></button>
+                <button onclick="startGameWithDifficulty('orta')" class="btn-hover bg-yellow-500 text-white py-4 rounded-xl text-2xl border-b-4 border-yellow-700">Orta <br><span class="text-sm font-normal">(15 Saniye, -50 ile +50)</span></button>
+                <button onclick="startGameWithDifficulty('zor')" class="btn-hover bg-red-500 text-white py-4 rounded-xl text-2xl border-b-4 border-red-700">Zor <br><span class="text-sm font-normal">(30 Saniye, -100 ile +100)</span></button>
+            </div>
+            <button onclick="closeModal('difficultyModal')" class="mt-6 w-full bg-gray-400 text-white py-3 rounded-xl text-xl btn-hover border-b-4 border-gray-600">Geri Dön</button>
+        </div>
+    </div>
+
+    <!-- Oyun Sonu (Kazanan) Modalı -->
+    <div id="gameOverModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full border-8 border-purple-500 relative shadow-2xl text-center">
+            <h2 class="text-5xl text-purple-600 mb-6 font-bold border-b-4 border-purple-200 pb-4">Oyun Bitti!</h2>
+            
+            <!-- Gülen Zıplayan Kazanan Karakter Buraya Gelecek -->
+            <div id="winnerCharacterContainer" class="flex justify-center items-end h-[120px] mb-6"></div>
+
+            <div id="winnerText" class="text-3xl md:text-4xl text-gray-800 mb-8 font-extrabold leading-tight">
+                <!-- Kazanan mesajı buraya gelecek -->
+            </div>
+            <div class="flex gap-4">
+                <button onclick="quitGame()" class="w-full bg-blue-500 text-white py-4 rounded-xl text-2xl btn-hover border-b-4 border-blue-700 z-50">Ana Menüye Dön</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nasıl Oynanır Modalı -->
+    <div id="howToPlayModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border-8 border-yellow-400 relative shadow-2xl">
+            <h2 class="text-4xl text-yellow-500 mb-6 text-center border-b-4 border-yellow-200 pb-2">Nasıl Oynanır?</h2>
+            <div class="text-gray-700 text-xl leading-relaxed space-y-4">
+                <p>🎯 <strong>Amaç:</strong> Ekranda beliren tam sayı toplama veya çıkarma işleminin doğru cevabını bulmak!</p>
+                <p>🎱 Süre bitince yukarıdan cevapların yazılı olduğu 3 farklı top düşmeye başlayacak.</p>
+                <p>🏃‍♂️ Karakterini kendin hareket ettirerek doğru topun altına gelmelisin:</p>
+                <ul class="list-disc pl-8">
+                    <li><strong>Tek Oyunculu (PC):</strong> Yön tuşları veya <kbd class="bg-gray-200 px-1 rounded">A</kbd><kbd class="bg-gray-200 px-1 rounded">D</kbd> ile hareket et, <kbd class="bg-gray-200 px-1 rounded">W</kbd> veya <kbd class="bg-gray-200 px-1 rounded">Yukarı Ok</kbd> ile zıpla.</li>
+                    <li><strong>Tek Oyunculu (Mobil):</strong> Ekrandaki yön ve zıplama butonlarını kullan.</li>
+                    <li><strong>İki Oyunculu:</strong> 1. Oyuncu <kbd class="bg-gray-200 px-1 rounded">A</kbd><kbd class="bg-gray-200 px-1 rounded">D</kbd><kbd class="bg-gray-200 px-1 rounded">W</kbd>, 2. Oyuncu Yön Tuşlarını kullanır.</li>
+                </ul>
+                <p class="text-green-600 font-bold mt-4 text-center text-2xl">Doğru topu vuran puanı kapar!</p>
+            </div>
+            <button onclick="closeModal('howToPlayModal')" class="mt-8 w-full bg-red-500 text-white py-3 rounded-xl text-2xl btn-hover border-b-4 border-red-700">Anladım, Kapat</button>
+        </div>
+    </div>
+
+    <!-- Çıkış Onay Modalı -->
+    <div id="exitConfirmModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto border-8 border-red-400 relative shadow-2xl text-center">
+            <h2 class="text-3xl text-gray-800 mb-4 border-b-4 border-red-200 pb-2 font-bold">Oyundan Çıkılsın mı?</h2>
+            <p class="text-xl text-gray-600 mb-8">Mevcut ilerlemeniz silinecek ve ana menüye döneceksiniz.</p>
+            <div class="flex gap-4">
+                <button onclick="quitGame()" class="w-1/2 bg-red-500 text-white py-3 rounded-xl text-xl btn-hover border-b-4 border-red-700">Evet, Çık</button>
+                <button onclick="cancelExit()" class="w-1/2 bg-gray-400 text-white py-3 rounded-xl text-xl btn-hover border-b-4 border-gray-600">İptal, Devam</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Geliştirici Bilgisi Modalı -->
+    <div id="devModal" class="hidden absolute top-0 left-0 w-full h-full modal-bg flex items-center justify-center z-50 p-4 pointer-events-auto">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto border-8 border-gray-400 relative shadow-2xl text-center">
+            <h2 class="text-3xl text-gray-700 mb-6 border-b-4 border-gray-200 pb-2">Geliştirici Bilgisi</h2>
+            <p class="text-xl text-gray-600 mb-2">Bu oyun, ortaokul öğrencilerinin tam sayılarda işlem yeteneklerini geliştirmeleri için tasarlanmıştır.</p>
+            <div class="bg-blue-100 p-4 rounded-xl mt-6 inline-block">
+                <p class="font-bold text-blue-800">Kodlama Desteği Yapay Zeka</p>
+                <p class="text-sm text-blue-600">tarafından sevgiyle kodlandı ❤️</p>
+            </div>
+            <button onclick="closeModal('devModal')" class="mt-8 w-full bg-gray-500 text-white py-3 rounded-xl text-xl btn-hover border-b-4 border-gray-700">Geri Dön</button>
+        </div>
+    </div>
+
+    <script>
+        // İpucu (Tooltip) Mesajını 10 Saniye Sonra Gizleme
+        setTimeout(() => {
+            const tooltip = document.getElementById('settingsTooltip');
+            if (tooltip) {
+                tooltip.classList.remove('opacity-100');
+                tooltip.classList.add('opacity-0', '-translate-y-2');
+                // DOM'dan temizle
+                setTimeout(() => tooltip.remove(), 1000); 
+            }
+        }, 10000);
+
+        // --- RENK SEÇİM VE YÖNETİM MANTIĞI ---
+        let p1CurrentColor = '#3b82f6'; // Varsayılan Mavi
+        let p2CurrentColor = '#ef4444'; // Varsayılan Kırmızı
+
+        // Rengi koyulaştıran yardımcı fonksiyon (alt gölge/derinlik için)
+        function darkenColor(hex, percent) {
+            hex = hex.replace(/^#/, '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            let r = parseInt(hex.substring(0, 2), 16);
+            let g = parseInt(hex.substring(2, 4), 16);
+            let b = parseInt(hex.substring(4, 6), 16);
+
+            r = Math.floor(r * (100 + percent) / 100);
+            g = Math.floor(g * (100 + percent) / 100);
+            b = Math.floor(b * (100 + percent) / 100);
+
+            r = r < 0 ? 0 : r > 255 ? 255 : r;
+            g = g < 0 ? 0 : g > 255 ? 255 : g;
+            b = b < 0 ? 0 : b > 255 ? 255 : b;
+
+            let rr = r.toString(16).padStart(2, '0');
+            let gg = g.toString(16).padStart(2, '0');
+            let bb = b.toString(16).padStart(2, '0');
+
+            return `#${rr}${gg}${bb}`;
+        }
+
+        // 1. Oyuncu Renk Değişimi Dinleyicisi
+        document.getElementById('p1ColorInput').addEventListener('input', (e) => {
+            p1CurrentColor = e.target.value;
+            const darkCol = darkenColor(p1CurrentColor, -25); // %25 daha koyu
+            
+            // Ayarlar kutusunu güncelle
+            e.target.style.borderColor = p1CurrentColor;
+            document.getElementById('p1NameInput').style.color = p1CurrentColor;
+            document.getElementById('p1NameInput').style.borderColor = p1CurrentColor;
+            
+            // Menüdeki karakteri anlık güncelle
+            const menuChar = document.getElementById('menuCharP1');
+            if (menuChar) {
+                menuChar.style.backgroundColor = p1CurrentColor;
+                menuChar.style.borderColor = darkCol;
+            }
+        });
+
+        // 2. Oyuncu Renk Değişimi Dinleyicisi
+        document.getElementById('p2ColorInput').addEventListener('input', (e) => {
+            p2CurrentColor = e.target.value;
+            const darkCol = darkenColor(p2CurrentColor, -25); // %25 daha koyu
+            
+            // Ayarlar kutusunu güncelle
+            e.target.style.borderColor = p2CurrentColor;
+            document.getElementById('p2NameInput').style.color = p2CurrentColor;
+            document.getElementById('p2NameInput').style.borderColor = p2CurrentColor;
+            
+            // Menüdeki karakteri anlık güncelle
+            const menuChar = document.getElementById('menuCharP2');
+            if (menuChar) {
+                menuChar.style.backgroundColor = p2CurrentColor;
+                menuChar.style.borderColor = darkCol;
+            }
+        });
+
+
+        // --- YILDIZ PARLAMASI (KAYAN RAKAMLAR) MANTIĞI ---
+        let floatingNumberInterval = null;
+        let activeFloatingNumbers = []; // Çarpışmayı önlemek için kayıt dizisi
+
+        function spawnFloatingNumber() {
+            if (gameState !== 'MENU') return;
+            const container = document.getElementById('floatingNumbersContainer');
+            if (!container) return;
+
+            const now = Date.now();
+            // 3 saniye (3000ms) süresini dolduranları temizle
+            activeFloatingNumbers = activeFloatingNumbers.filter(n => now - n.time < 3000);
+
+            let xPos, yPos, attempts = 0;
+            let validPosition = false;
+
+            // Rakamların üst üste binmemesi için güvenli mesafe arayışı (maksimum 10 deneme)
+            while (attempts < 10 && !validPosition) {
+                const isLeft = Math.random() > 0.5;
+                xPos = isLeft ? (Math.random() * 25 + 5) : (Math.random() * 25 + 70);
+                yPos = Math.random() * 45 + 10; 
+                
+                validPosition = true;
+                for (let active of activeFloatingNumbers) {
+                    const dx = active.x - xPos;
+                    const dy = active.y - yPos;
+                    // Yüzdelik bazda mesafe kontrolü (tahmini 12 birim yarıçap)
+                    if (Math.hypot(dx, dy) < 12) { 
+                        validPosition = false;
+                        break;
+                    }
+                }
+                attempts++;
+            }
+
+            // Eğer çok sıkışıksa bu döngüde sayı üretme atla
+            if (!validPosition) return;
+
+            activeFloatingNumbers.push({x: xPos, y: yPos, time: now});
+
+            const el = document.createElement('div');
+            const num = Math.floor(Math.random() * 199) - 99;
+            el.innerText = num > 0 ? `+${num}` : num;
+            
+            const colors = ['text-yellow-300', 'text-green-300', 'text-pink-300', 'text-blue-300', 'text-purple-300', 'text-white'];
+            // Rakam boyutları küçültüldü
+            const sizes = ['text-xl', 'text-2xl', 'text-3xl', 'text-4xl'];
+            
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const size = sizes[Math.floor(Math.random() * sizes.length)];
+
+            el.className = `absolute font-extrabold opacity-0 animate-star-fade ${color} ${size}`;
+            el.style.left = `${xPos}%`;
+            el.style.top = `${yPos}%`;
+
+            container.appendChild(el);
+
+            setTimeout(() => {
+                if (container.contains(el)) el.remove();
+            }, 3000);
+        }
+
+        function startFloatingNumbers() {
+            if (!floatingNumberInterval) {
+                floatingNumberInterval = setInterval(spawnFloatingNumber, 400); 
+            }
+        }
+
+        function stopFloatingNumbers() {
+            if (floatingNumberInterval) {
+                clearInterval(floatingNumberInterval);
+                floatingNumberInterval = null;
+            }
+            activeFloatingNumbers = [];
+            const container = document.getElementById('floatingNumbersContainer');
+            if(container) container.innerHTML = '';
+        }
+
+        // --- SES MOTORU (Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        
+        let menuMusicPlaying = false;
+        let menuMusicInterval;
+        
+        // Ses Ayar Değişkenleri
+        let sfxEnabled = true;   // Oyun içi efektleri
+        let bgmEnabled = false;  // Sadece ana menü müziği
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function openSettings() {
+            if (!audioCtx) initAudio();
+            openModal('settingsModal');
+        }
+
+        function toggleGameSound() {
+            if (!audioCtx) initAudio();
+            sfxEnabled = !sfxEnabled;
+            const btn = document.getElementById('btnGameSound');
+            if (sfxEnabled) {
+                btn.className = "bg-green-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-green-700 transition-all";
+                btn.innerText = "Oyun Sesi: Açık";
+            } else {
+                btn.className = "bg-red-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-red-700 transition-all";
+                btn.innerText = "Oyun Sesi: Kapalı";
+            }
+        }
+
+        function toggleMenuBGM() {
+            if (!audioCtx) initAudio();
+            bgmEnabled = !bgmEnabled;
+            const btn = document.getElementById('btnMenuBGM');
+            if (bgmEnabled) {
+                // Açıkken de yeşil buton rengine dönüldü
+                btn.className = "bg-green-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-green-700 transition-all";
+                btn.innerText = "Ana Ekran Müziği: Açık";
+                if (gameState === 'MENU') playMenuMusic();
+            } else {
+                btn.className = "bg-red-500 text-white py-2 px-4 rounded-xl text-xl font-bold border-b-4 border-red-700 transition-all";
+                btn.innerText = "Ana Ekran Müziği: Kapalı";
+                stopMenuMusic();
+            }
+        }
+
+        // Arka Plan Müziğini Çal
+        function playMenuMusic() {
+            if (!bgmEnabled || menuMusicPlaying || gameState !== 'MENU') return;
+            if (!audioCtx) initAudio();
+            menuMusicPlaying = true;
+
+            const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63]; 
+            let noteIndex = 0;
+
+            function playNextNote() {
+                if (!menuMusicPlaying) return;
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                osc.type = 'triangle'; 
+                osc.frequency.setValueAtTime(notes[noteIndex], now);
+
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.03, now + 0.1);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.4);
+
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.4);
+
+                noteIndex = (noteIndex + 1) % notes.length;
+            }
+
+            playNextNote();
+            menuMusicInterval = setInterval(playNextNote, 400); 
+        }
+
+        function stopMenuMusic() {
+            menuMusicPlaying = false;
+            clearInterval(menuMusicInterval);
+        }
+
+        // Efekt Sesleri
+        function playSound(type) {
+            if (!sfxEnabled || !audioCtx) return; 
+            
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'start') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                osc.frequency.exponentialRampToValueAtTime(1000, now + 0.2);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                // Daha tatlı bir "womp" yanlış sesi
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'gameover') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(500, now + 0.2);
+                osc.frequency.setValueAtTime(600, now + 0.4);
+                osc.frequency.setValueAtTime(800, now + 0.6);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0.2, now + 0.6);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+                osc.start(now);
+                osc.stop(now + 1.2);
+            }
+        }
+
+        // --- TAM EKRAN FONKSİYONU ---
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Tam ekran yapılamadı: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // --- 1. DEĞİŞKENLER VE AYARLAR ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Yeni eklenen Efekt Canvas'ı
+        const fxCanvas = document.getElementById('fxCanvas');
+        const fxCtx = fxCanvas.getContext('2d');
+
+        const ui = {
+            menu: document.getElementById('mainMenu'),
+            gameCanvas: document.getElementById('gameCanvas'),
+            fxCanvas: document.getElementById('fxCanvas'),
+            gameUI: document.getElementById('gameUI'),
+            questionBox: document.getElementById('questionBox'),
+            timerDisplay: document.getElementById('timerDisplay'),
+            scoreP1: document.getElementById('scoreP1Display'),
+            scoreP2: document.getElementById('scoreP2Display'),
+            messageBox: document.getElementById('messageBox'),
+            mobileControls: document.getElementById('mobileControls'),
+            questionCountDisplay: document.getElementById('questionCountDisplay')
+        };
+
+        let animationId;
+        let gameState = 'MENU'; 
+        let previousGameState = 'MENU'; 
+        
+        let tempPlayerCount = 1; 
+        let playerCount = 1;
+        let timer = 10;
+        let timerInterval;
+
+        const MAX_QUESTIONS = 10;
+        let questionCount = 0;
+        let gameConfig = { range: 20, time: 10 }; 
+
+        let questionData = { str: "", correct: 0, options: [] };
+        let balls = [];
+        let players = [];
+        let fireworks = []; 
+
+        const keys = {};
+        let touchMoveDir = 0; 
+
+        const GRAVITY = 0.6;
+        const JUMP_STRENGTH = -15;
+        const MOVE_SPEED = 7; 
+        const BALL_FALL_SPEED = 2;
+
+        // --- 2. YARDIMCI FONKSİYONLAR ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            fxCanvas.width = window.innerWidth;
+            fxCanvas.height = window.innerHeight;
+
+            players.forEach(p => {
+                if (p.y > canvas.height - p.height - 20) {
+                    p.y = canvas.height - p.height - 20;
+                }
+            });
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // --- 3. OYUN NESNELERİ ---
+        
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 8 + 2; 
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.02 + 0.015;
+                this.gravity = 0.05;
+            }
+            update() {
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw(renderCtx) {
+                renderCtx.globalAlpha = Math.max(0, this.life);
+                renderCtx.fillStyle = this.color;
+                
+                renderCtx.shadowColor = this.color;
+                renderCtx.shadowBlur = 12;
+
+                renderCtx.beginPath();
+                renderCtx.arc(this.x, this.y, 5, 0, Math.PI * 2); 
+                renderCtx.fill();
+
+                renderCtx.shadowBlur = 0;
+                renderCtx.globalAlpha = 1.0;
+            }
+        }
+
+        class Player {
+            constructor(x, color, darkColor, name, isP1) {
+                this.width = 60;
+                this.height = 60;
+                this.x = x;
+                this.y = window.innerHeight - this.height - 20;
+                this.vy = 0;
+                this.vx = 0; 
+                this.color = color;
+                this.darkColor = darkColor;
+                this.name = name;
+                this.score = 0;
+                this.isP1 = isP1;
+                this.facingRight = isP1; 
+            }
+
+            update() {
+                this.vy += GRAVITY;
+                this.y += this.vy;
+
+                const groundY = canvas.height - this.height - 20;
+                if (this.y >= groundY) {
+                    this.y = groundY;
+                    this.vy = 0;
+                }
+
+                this.vx = 0; 
+                if (this.isP1) {
+                    if (keys['KeyA'] || (playerCount === 1 && keys['ArrowLeft'])) this.vx = -MOVE_SPEED;
+                    if (keys['KeyD'] || (playerCount === 1 && keys['ArrowRight'])) this.vx = MOVE_SPEED;
+                    if (touchMoveDir !== 0) this.vx = touchMoveDir * MOVE_SPEED;
+                } else {
+                    if (keys['ArrowLeft']) this.vx = -MOVE_SPEED;
+                    if (keys['ArrowRight']) this.vx = MOVE_SPEED;
+                }
+
+                if (this.vx > 0) this.facingRight = true;
+                else if (this.vx < 0) this.facingRight = false;
+
+                this.x += this.vx;
+                
+                if (this.x <= 0) this.x = 0;
+                if (this.x + this.width >= canvas.width) this.x = canvas.width - this.width;
+            }
+
+            draw() {
+                const groundY = canvas.height - 20;
+                const distFromGround = groundY - (this.y + this.height);
+                const shadowScale = Math.max(0.3, 1 - (distFromGround / 150));
+                const shadowOpacity = Math.max(0.05, 0.4 - (distFromGround / 150) * 0.3);
+
+                ctx.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
+                ctx.beginPath();
+                ctx.ellipse(this.x + this.width / 2, groundY + 5, (this.width / 2 + 5) * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 5;
+                ctx.shadowOffsetX = 0;
+
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 12);
+                ctx.fill();
+
+                ctx.shadowColor = 'transparent';
+
+                ctx.fillStyle = this.darkColor;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y + this.height - 8, this.width, 8, [0, 0, 12, 12]);
+                ctx.fill();
+                
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.roundRect(this.x + 10 + (this.facingRight ? 10 : 0), this.y + 12, 16, 16, 4);
+                ctx.roundRect(this.x + 34 + (this.facingRight ? 0 : -10), this.y + 12, 16, 16, 4);
+                ctx.fill();
+                
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(this.x + 18 + (this.facingRight ? 10 : 0), this.y + 20, 4, 0, Math.PI * 2);
+                ctx.arc(this.x + 42 + (this.facingRight ? 0 : -10), this.y + 20, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            jump() {
+                if (this.y >= canvas.height - this.height - 25) { 
+                    this.vy = JUMP_STRENGTH;
+                }
+            }
+        }
+
+        class Ball {
+            constructor(x, value, isCorrect) {
+                this.x = x;
+                this.y = -50;
+                this.radius = 45; 
+                this.value = value;
+                this.isCorrect = isCorrect;
+                this.color = '#ff9800'; 
+            }
+
+            update() {
+                this.y += BALL_FALL_SPEED;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#e65100';
+                ctx.stroke();
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.value, this.x, this.y);
+            }
+        }
+
+        // --- 4. OYUN MEKANİĞİ ---
+
+        function selectPlayerMode(mode) {
+            tempPlayerCount = mode;
+            openModal('difficultyModal');
+        }
+
+        function startGameWithDifficulty(level) {
+            if (!audioCtx) initAudio(); 
+
+            if (level === 'kolay') gameConfig = { range: 20, time: 10 };
+            else if (level === 'orta') gameConfig = { range: 50, time: 15 };
+            else if (level === 'zor') gameConfig = { range: 100, time: 30 };
+
+            closeModal('difficultyModal');
+            startGame(tempPlayerCount);
+        }
+
+        function startGame(mode) {
+            stopMenuMusic(); 
+            stopFloatingNumbers(); // Animasyonu durdur
+
+            playSound('start'); 
+            gameState = 'THINKING'; 
+            playerCount = mode;
+            questionCount = 0; 
+            fireworks = []; 
+
+            let p1Name = document.getElementById('p1NameInput') ? document.getElementById('p1NameInput').value.trim() : '';
+            let p2Name = document.getElementById('p2NameInput') ? document.getElementById('p2NameInput').value.trim() : '';
+            p1Name = p1Name || '1. Oyuncu';
+            p2Name = p2Name || '2. Oyuncu';
+
+            // Koyu renk sınırları hesapla
+            let p1Dark = darkenColor(p1CurrentColor, -25);
+            let p2Dark = darkenColor(p2CurrentColor, -25);
+
+            ui.menu.classList.add('hidden');
+            ui.gameCanvas.classList.remove('hidden');
+            ui.fxCanvas.classList.remove('hidden');
+            ui.gameUI.classList.remove('hidden');
+            
+            if ('ontouchstart' in window && playerCount === 1) {
+                ui.mobileControls.classList.remove('hidden');
+            } else {
+                ui.mobileControls.classList.add('hidden');
+            }
+            
+            resizeCanvas();
+
+            players = [];
+            if (playerCount === 1) {
+                players.push(new Player(canvas.width / 2, p1CurrentColor, p1Dark, p1Name, true)); 
+                ui.scoreP1.classList.remove('hidden');
+                ui.scoreP1.style.backgroundColor = p1CurrentColor; // Dinamik Renk
+                ui.scoreP2.classList.add('hidden');
+            } else {
+                players.push(new Player(canvas.width / 3, p1CurrentColor, p1Dark, p1Name, true));
+                players.push(new Player((canvas.width / 3) * 2, p2CurrentColor, p2Dark, p2Name, false));
+                
+                ui.scoreP1.classList.remove('hidden');
+                ui.scoreP1.style.backgroundColor = p1CurrentColor; // Dinamik Renk
+                
+                ui.scoreP2.classList.remove('hidden');
+                ui.scoreP2.style.backgroundColor = p2CurrentColor; // Dinamik Renk
+            }
+
+            updateScores();
+            generateNewQuestion();
+            gameLoop();
+        }
+
+        // --- ÇIKIŞ YÖNETİMİ ---
+        function requestExit() {
+            if (gameState === 'MENU' || gameState === 'PAUSED' || gameState === 'GAMEOVER') return;
+            previousGameState = gameState;
+            gameState = 'PAUSED'; 
+            openModal('exitConfirmModal');
+        }
+
+        function cancelExit() {
+            gameState = previousGameState; 
+            closeModal('exitConfirmModal');
+        }
+
+        function quitGame() {
+            closeModal('exitConfirmModal');
+            closeModal('gameOverModal');
+            gameState = 'MENU';
+            clearInterval(timerInterval);
+            cancelAnimationFrame(animationId);
+            fireworks = []; 
+            
+            ui.gameCanvas.classList.add('hidden');
+            ui.fxCanvas.classList.add('hidden');
+            ui.gameUI.classList.add('hidden');
+            ui.mobileControls.classList.add('hidden');
+            ui.menu.classList.remove('hidden');
+            
+            startFloatingNumbers(); // Animasyonu yeniden başlat
+            if(bgmEnabled) playMenuMusic(); 
+        }
+
+        // Oyun sonu ekranındaki gülen karakteri oluşturma fonksiyonu güncellendi (Kendi rengiyle)
+        function createSmilingCharHtml(player, delay = false) {
+            const animClass = delay ? 'animate-jump-p2' : 'animate-jump-p1';
+            const shadowClass = delay ? 'animate-shadow-p2' : 'animate-shadow-p1';
+
+            return `
+            <div class="relative mx-4 mt-8">
+                <!-- Inline style ile dinamik renk uygulandı -->
+                <div class="${animClass} w-[80px] h-[80px] relative shadow-xl rounded-lg border-b-8 z-10" style="background-color: ${player.color}; border-color: ${player.darkColor};">
+                    <div class="absolute top-[25px] left-[15px] w-[20px] h-[15px] border-t-[6px] border-black rounded-[50%]"></div>
+                    <div class="absolute top-[25px] left-[45px] w-[20px] h-[15px] border-t-[6px] border-black rounded-[50%]"></div>
+                </div>
+                <div class="absolute -bottom-2 left-[5px] w-[70px] h-[12px] bg-black rounded-[100%] blur-sm ${shadowClass}"></div>
+            </div>
+            `;
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            clearInterval(timerInterval);
+            ui.questionBox.innerText = "Oyun Bitti!";
+            playSound('gameover'); 
+            
+            let winnerMessage = "";
+            let winnerTextEl = document.getElementById('winnerText');
+            let charContainer = document.getElementById('winnerCharacterContainer');
+
+            if (playerCount === 1) {
+                winnerMessage = `Tebrikler!<br><span class="text-5xl mt-2 block" style="color: ${players[0].color}">Toplam Skor: ${players[0].score}</span>`;
+                charContainer.innerHTML = createSmilingCharHtml(players[0]);
+            } else {
+                if (players[0].score > players[1].score) {
+                    winnerMessage = `🏆 ${players[0].name} Kazandı!`;
+                    winnerTextEl.className = "text-3xl md:text-5xl mb-8 font-extrabold leading-tight";
+                    winnerTextEl.style.color = players[0].color; // Dinamik Kazanan Rengi
+                    charContainer.innerHTML = createSmilingCharHtml(players[0]);
+                } else if (players[1].score > players[0].score) {
+                    winnerMessage = `🏆 ${players[1].name} Kazandı!`;
+                    winnerTextEl.className = "text-3xl md:text-5xl mb-8 font-extrabold leading-tight";
+                    winnerTextEl.style.color = players[1].color; // Dinamik Kazanan Rengi
+                    charContainer.innerHTML = createSmilingCharHtml(players[1]);
+                } else {
+                    winnerMessage = "🤝 Matematik Dostluğu Kazandı!";
+                    winnerTextEl.className = "text-3xl md:text-5xl text-green-600 mb-8 font-extrabold leading-tight";
+                    winnerTextEl.style.color = ""; // Inline stili temizle
+                    charContainer.innerHTML = createSmilingCharHtml(players[0]) + createSmilingCharHtml(players[1], true);
+                }
+            }
+
+            winnerTextEl.innerHTML = winnerMessage;
+            openModal('gameOverModal');
+        }
+
+        function generateNewQuestion() {
+            if (gameState === 'MENU' || gameState === 'GAMEOVER') return;
+
+            if (questionCount >= MAX_QUESTIONS) {
+                endGame();
+                return;
+            }
+
+            questionCount++;
+            ui.questionCountDisplay.innerText = `Soru: ${questionCount}/${MAX_QUESTIONS}`;
+
+            gameState = 'THINKING';
+            balls = [];
+            timer = gameConfig.time; 
+            ui.timerDisplay.innerText = timer;
+            ui.timerDisplay.classList.remove('text-red-500', 'animate-ping');
+            ui.questionBox.classList.remove('scale-75', 'opacity-50');
+
+            let r = gameConfig.range;
+            let num1 = Math.floor(Math.random() * (r * 2 + 1)) - r;
+            let num2 = Math.floor(Math.random() * (r * 2 + 1)) - r;
+            let isAddition = Math.random() > 0.5;
+
+            let strNum1 = num1 < 0 ? `(${num1})` : `${num1}`;
+            let strNum2 = num2 < 0 ? `(${num2})` : `${num2}`;
+
+            if (isAddition) {
+                questionData.correct = num1 + num2;
+                questionData.str = `${strNum1} + ${strNum2} = ?`;
+            } else {
+                questionData.correct = num1 - num2;
+                questionData.str = `${strNum1} - ${strNum2} = ?`;
+            }
+
+            ui.questionBox.innerText = questionData.str;
+
+            let offset1 = Math.floor(Math.random() * 8) + 2; 
+            let offset2 = Math.floor(Math.random() * 10) + 12;
+            let wrong1 = questionData.correct + offset1 * (Math.random() > 0.5 ? 1 : -1);
+            let wrong2 = questionData.correct + offset2 * (Math.random() > 0.5 ? 1 : -1);
+            
+            let options = [questionData.correct, wrong1, wrong2];
+            options.sort(() => Math.random() - 0.5);
+            questionData.options = options;
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameState === 'PAUSED' || gameState === 'GAMEOVER') return; 
+
+                timer--;
+                ui.timerDisplay.innerText = timer;
+                if(timer <= 3) {
+                    ui.timerDisplay.classList.add('text-red-500', 'animate-pulse');
+                }
+                if (timer <= 0) {
+                    clearInterval(timerInterval);
+                    startFallingPhase();
+                }
+            }, 1000);
+        }
+
+        function startFallingPhase() {
+            gameState = 'FALLING';
+            ui.timerDisplay.innerText = "Zıpla!";
+            ui.questionBox.classList.add('scale-75', 'opacity-50'); 
+
+            const sectionWidth = canvas.width / 3;
+            for (let i = 0; i < 3; i++) {
+                let val = questionData.options[i];
+                let xPos = (sectionWidth * i) + (sectionWidth / 2);
+                balls.push(new Ball(xPos, val, val === questionData.correct));
+            }
+        }
+
+        function checkCollisions() {
+            if (gameState !== 'FALLING') return;
+
+            for (let p of players) {
+                for (let i = balls.length - 1; i >= 0; i--) {
+                    let b = balls[i];
+                    
+                    let testX = b.x;
+                    let testY = b.y;
+
+                    if (b.x < p.x) testX = p.x; else if (b.x > p.x + p.width) testX = p.x + p.width;
+                    if (b.y < p.y) testY = p.y; else if (b.y > p.y + p.height) testY = p.y + p.height;
+
+                    let distX = b.x - testX;
+                    let distY = b.y - testY;
+                    let distance = Math.sqrt((distX*distX) + (distY*distY));
+
+                    if (distance <= b.radius) {
+                        handleAnswer(p, b.isCorrect);
+                        return;
+                    }
+                }
+            }
+
+            if (balls.length > 0 && balls[0].y > canvas.height + 50) {
+                playSound('wrong'); 
+                showMessage("Süre Doldu!", "text-yellow-500 bg-gray-900 bg-opacity-80 px-6 py-2 rounded-2xl");
+                setTimeout(generateNewQuestion, 2000);
+                gameState = 'WAITING';
+            }
+        }
+
+        function handleAnswer(player, isCorrect) {
+            gameState = 'WAITING'; 
+            if (isCorrect) {
+                player.score += 10;
+                playSound('correct'); 
+                showMessage(`${player.name} Doğru Bildi! +10`, "text-black bg-white bg-opacity-80 px-6 py-2 rounded-2xl");
+            } else {
+                player.score -= 5;
+                playSound('wrong'); 
+                showMessage(`Yanlış Cevap! Doğrusu ${questionData.correct} olacaktı.`, "text-red-600 bg-white bg-opacity-80 px-6 py-2 rounded-2xl");
+            }
+            updateScores();
+            setTimeout(generateNewQuestion, 2500);
+        }
+
+        function showMessage(text, colorClass) {
+            ui.messageBox.innerText = text;
+            ui.messageBox.className = `mt-10 text-3xl md:text-5xl font-bold transition-opacity duration-300 drop-shadow-lg text-center px-4 inline-block opacity-100 ${colorClass}`;
+            setTimeout(() => {
+                ui.messageBox.classList.remove('opacity-100');
+                ui.messageBox.classList.add('opacity-0');
+            }, 2000);
+        }
+
+        function updateScores() {
+            ui.scoreP1.innerText = `${players[0].name}: ${players[0].score}`;
+            if (playerCount === 2) {
+                ui.scoreP2.innerText = `${players[1].name}: ${players[1].score}`;
+            }
+        }
+
+        // --- 5. OYUN DÖNGÜSÜ (RENDER) ---
+        function gameLoop(timestamp) {
+            if (gameState === 'MENU') return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+
+            ctx.fillStyle = '#4ade80'; 
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
+            if (gameState !== 'PAUSED' && gameState !== 'GAMEOVER') {
+                if (gameState === 'FALLING') {
+                    balls.forEach(b => b.update());
+                }
+                players.forEach(p => p.update());
+                checkCollisions();
+            }
+
+            if (gameState === 'FALLING' || gameState === 'PAUSED' || gameState === 'WAITING' || gameState === 'GAMEOVER') {
+                balls.forEach(b => b.draw());
+            }
+            players.forEach(p => p.draw());
+
+            if (gameState === 'GAMEOVER') {
+                if (Math.random() < 0.05) {
+                    const fx = fxCanvas.width * 0.1 + Math.random() * (fxCanvas.width * 0.8);
+                    const fy = fxCanvas.height * 0.1 + Math.random() * (fxCanvas.height * 0.5);
+                    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff'];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    for (let i = 0; i < 80; i++) { 
+                        fireworks.push(new Particle(fx, fy, color));
+                    }
+                }
+                for (let i = fireworks.length - 1; i >= 0; i--) {
+                    let p = fireworks[i];
+                    p.update();
+                    p.draw(fxCtx);
+                    if (p.life <= 0) fireworks.splice(i, 1);
+                }
+            }
+
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- 6. KONTROLLER ---
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            if (gameState === 'PAUSED' || gameState === 'MENU' || gameState === 'GAMEOVER') return;
+
+            if (playerCount === 1) {
+                if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') {
+                    if(players[0]) players[0].jump();
+                }
+            } else {
+                if (e.code === 'KeyW' && players[0]) players[0].jump();
+                if (e.code === 'ArrowUp' && players[1]) players[1].jump();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnJump = document.getElementById('btnJump');
+
+        const handleTouchStart = (dir) => (e) => { 
+            e.preventDefault(); 
+            touchMoveDir = dir; 
+        };
+        const handleTouchEnd = (e) => { 
+            e.preventDefault(); 
+            touchMoveDir = 0; 
+        };
+
+        btnLeft.addEventListener('touchstart', handleTouchStart(-1));
+        btnLeft.addEventListener('touchend', handleTouchEnd);
+        btnLeft.addEventListener('touchcancel', handleTouchEnd);
+
+        btnRight.addEventListener('touchstart', handleTouchStart(1));
+        btnRight.addEventListener('touchend', handleTouchEnd);
+        btnRight.addEventListener('touchcancel', handleTouchEnd);
+
+        btnJump.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameState !== 'PAUSED' && gameState !== 'GAMEOVER' && players[0]) players[0].jump();
+        });
+
+        // Sayfa yüklendiğinde animasyonu başlat
+        startFloatingNumbers();
+    </script>
+</body>
+</html>
