@@ -128,17 +128,6 @@
         </div>
     </div>
 
-    <!-- Mobil Dokunmatik Kontroller -->
-    <div id="mobileControls" class="hidden absolute bottom-10 left-0 w-full px-6 md:px-12 pointer-events-none z-30 flex justify-between items-end">
-        <div class="flex gap-4 pointer-events-auto">
-            <button id="btnLeft" class="bg-blue-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-20 h-20 text-4xl flex items-center justify-center text-white border-b-4 border-blue-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">◀</button>
-            <button id="btnRight" class="bg-blue-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-20 h-20 text-4xl flex items-center justify-center text-white border-b-4 border-blue-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">▶</button>
-        </div>
-        <div class="pointer-events-auto">
-            <button id="btnJump" class="bg-green-500 bg-opacity-60 hover:bg-opacity-80 rounded-full w-24 h-24 text-5xl flex items-center justify-center text-white border-b-4 border-green-700 active:bg-opacity-100 active:translate-y-1 shadow-lg">▲</button>
-        </div>
-    </div>
-
     <!-- Ana Menü -->
     <div id="mainMenu" class="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-blue-400 to-purple-500 z-40 overflow-hidden">
         
@@ -280,10 +269,10 @@
                 <p>🎯 <strong>Amaç:</strong> Ekranda beliren tam sayı toplama veya çıkarma işleminin doğru cevabını bulmak!</p>
                 <p>🎱 Süre bitince yukarıdan cevapların yazılı olduğu 3 farklı top düşmeye başlayacak.</p>
                 <p>🏃‍♂️ Karakterini kendin hareket ettirerek doğru topun altına gelmelisin:</p>
-                <ul class="list-disc pl-8">
-                    <li><strong>Tek Oyunculu (PC):</strong> Yön tuşları veya <kbd class="bg-gray-200 px-1 rounded">A</kbd><kbd class="bg-gray-200 px-1 rounded">D</kbd> ile hareket et, <kbd class="bg-gray-200 px-1 rounded">W</kbd> veya <kbd class="bg-gray-200 px-1 rounded">Yukarı Ok</kbd> ile zıpla.</li>
-                    <li><strong>Tek Oyunculu (Mobil):</strong> Ekrandaki yön ve zıplama butonlarını kullan.</li>
-                    <li><strong>İki Oyunculu:</strong> 1. Oyuncu <kbd class="bg-gray-200 px-1 rounded">A</kbd><kbd class="bg-gray-200 px-1 rounded">D</kbd><kbd class="bg-gray-200 px-1 rounded">W</kbd>, 2. Oyuncu Yön Tuşlarını kullanır.</li>
+                <ul class="list-disc pl-8 space-y-2">
+                    <li><strong>Bilgisayarda:</strong> 1. Oyuncu <kbd class="bg-gray-200 px-1 rounded">A</kbd><kbd class="bg-gray-200 px-1 rounded">D</kbd><kbd class="bg-gray-200 px-1 rounded">W</kbd> tuşlarını, 2. Oyuncu Yön Tuşlarını kullanır.</li>
+                    <li><strong>Telefonda/Tablette:</strong> Ekranda sağa veya sola <strong>kaydırarak</strong> karakteri hareket ettir, <strong>yukarı kaydırarak</strong> zıpla!</li>
+                    <li><strong>İki Oyunculu (Mobil):</strong> Ekran ortadan ikiye bölünür. Sol taraf 1. oyuncu, sağ taraf 2. oyuncu içindir. Kendi alanınızda kaydırma yapın.</li>
                 </ul>
                 <p class="text-green-600 font-bold mt-4 text-center text-2xl">Doğru topu vuran puanı kapar!</p>
             </div>
@@ -646,7 +635,6 @@
             scoreP1: document.getElementById('scoreP1Display'),
             scoreP2: document.getElementById('scoreP2Display'),
             messageBox: document.getElementById('messageBox'),
-            mobileControls: document.getElementById('mobileControls'),
             questionCountDisplay: document.getElementById('questionCountDisplay')
         };
 
@@ -669,7 +657,7 @@
         let fireworks = []; 
 
         const keys = {};
-        let touchMoveDir = 0; 
+        const activeTouches = {}; // Çoklu dokunmatik takibi için
 
         const GRAVITY = 0.6;
         const JUMP_STRENGTH = -15;
@@ -758,13 +746,33 @@
                 }
 
                 this.vx = 0; 
+                
+                // Klavye Kontrolleri
                 if (this.isP1) {
                     if (keys['KeyA'] || (playerCount === 1 && keys['ArrowLeft'])) this.vx = -MOVE_SPEED;
                     if (keys['KeyD'] || (playerCount === 1 && keys['ArrowRight'])) this.vx = MOVE_SPEED;
-                    if (touchMoveDir !== 0) this.vx = touchMoveDir * MOVE_SPEED;
                 } else {
                     if (keys['ArrowLeft']) this.vx = -MOVE_SPEED;
                     if (keys['ArrowRight']) this.vx = MOVE_SPEED;
+                }
+
+                // Dokunmatik (Kaydırma) Kontrolleri (Klavyeyi ezer)
+                let touchVx = 0;
+                let isTouchActive = false;
+                let pIndex = this.isP1 ? 0 : 1;
+
+                for (let id in activeTouches) {
+                    let t = activeTouches[id];
+                    if (t.playerIndex === pIndex) {
+                        isTouchActive = true;
+                        let dx = t.currentX - t.startX;
+                        if (dx > 20) touchVx = MOVE_SPEED; // Sağa kaydırma
+                        else if (dx < -20) touchVx = -MOVE_SPEED; // Sola kaydırma
+                    }
+                }
+
+                if (isTouchActive) {
+                    this.vx = touchVx;
                 }
 
                 if (this.vx > 0) this.facingRight = true;
@@ -897,12 +905,6 @@
             ui.fxCanvas.classList.remove('hidden');
             ui.gameUI.classList.remove('hidden');
             
-            if ('ontouchstart' in window && playerCount === 1) {
-                ui.mobileControls.classList.remove('hidden');
-            } else {
-                ui.mobileControls.classList.add('hidden');
-            }
-            
             resizeCanvas();
 
             players = [];
@@ -951,7 +953,6 @@
             ui.gameCanvas.classList.add('hidden');
             ui.fxCanvas.classList.add('hidden');
             ui.gameUI.classList.add('hidden');
-            ui.mobileControls.classList.add('hidden');
             ui.menu.classList.remove('hidden');
             
             startFloatingNumbers(); // Animasyonu yeniden başlat
@@ -1213,31 +1214,64 @@
             keys[e.code] = false;
         });
 
-        const btnLeft = document.getElementById('btnLeft');
-        const btnRight = document.getElementById('btnRight');
-        const btnJump = document.getElementById('btnJump');
+        // --- DOKUNMATİK EKRAN (KAYDIRMA) KONTROLLERİ ---
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Sayfa kaymasını engelle
+            if (gameState === 'PAUSED' || gameState === 'MENU' || gameState === 'GAMEOVER') return;
 
-        const handleTouchStart = (dir) => (e) => { 
-            e.preventDefault(); 
-            touchMoveDir = dir; 
-        };
-        const handleTouchEnd = (e) => { 
-            e.preventDefault(); 
-            touchMoveDir = 0; 
-        };
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                let pIndex = 0;
+                
+                // İki oyunculu modda ekranı ortadan ikiye bölüyoruz
+                if (playerCount === 2) {
+                    pIndex = t.clientX < window.innerWidth / 2 ? 0 : 1;
+                }
+                
+                activeTouches[t.identifier] = {
+                    startX: t.clientX,
+                    startY: t.clientY,
+                    currentX: t.clientX,
+                    currentY: t.clientY,
+                    playerIndex: pIndex,
+                    hasJumped: false
+                };
+            }
+        }, { passive: false });
 
-        btnLeft.addEventListener('touchstart', handleTouchStart(-1));
-        btnLeft.addEventListener('touchend', handleTouchEnd);
-        btnLeft.addEventListener('touchcancel', handleTouchEnd);
-
-        btnRight.addEventListener('touchstart', handleTouchStart(1));
-        btnRight.addEventListener('touchend', handleTouchEnd);
-        btnRight.addEventListener('touchcancel', handleTouchEnd);
-
-        btnJump.addEventListener('touchstart', (e) => {
+        canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            if (gameState !== 'PAUSED' && gameState !== 'GAMEOVER' && players[0]) players[0].jump();
-        });
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (activeTouches[t.identifier]) {
+                    activeTouches[t.identifier].currentX = t.clientX;
+                    activeTouches[t.identifier].currentY = t.clientY;
+
+                    // Yukarı kaydırma algılama (Zıplama)
+                    let touchData = activeTouches[t.identifier];
+                    let dy = touchData.currentY - touchData.startY;
+                    
+                    // Eğer -40 piksel yukarı kaydırıldıysa ve henüz bu dokunuşla zıplanmadıysa
+                    if (dy < -40 && !touchData.hasJumped) {
+                        if (players[touchData.playerIndex] && gameState !== 'PAUSED' && gameState !== 'GAMEOVER') {
+                            players[touchData.playerIndex].jump();
+                        }
+                        touchData.hasJumped = true; // Sadece bir kez zıplamasına izin ver
+                    }
+                }
+            }
+        }, { passive: false });
+
+        const handleTouchEnd = (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                delete activeTouches[t.identifier];
+            }
+        };
+
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
         // Sayfa yüklendiğinde animasyonu başlat
         startFloatingNumbers();
