@@ -1159,6 +1159,18 @@
             ctx.fillStyle = '#4ade80'; 
             ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
 
+            // İki oyunculu modda ekranı ikiye bölen rehber çizgi
+            if (playerCount === 2) {
+                ctx.beginPath();
+                ctx.setLineDash([15, 15]); // Kesik çizgi efekti
+                ctx.moveTo(canvas.width / 2, 0);
+                ctx.lineTo(canvas.width / 2, canvas.height - 20); // Zemine kadar inen çizgi
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Göze batmayan yarı şeffaf, hafif gri/beyaz ton
+                ctx.stroke();
+                ctx.setLineDash([]); // Çizgi stilini diğer çizimler için sıfırla
+            }
+
             if (gameState !== 'PAUSED' && gameState !== 'GAMEOVER') {
                 if (gameState === 'FALLING') {
                     balls.forEach(b => b.update());
